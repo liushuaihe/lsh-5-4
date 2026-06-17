@@ -23,6 +23,16 @@ function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
+class ApiError extends Error {
+  code?: string;
+  
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...options,
@@ -30,7 +40,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Network error' }));
-    throw new Error(err.error || err.message || 'Request failed');
+    throw new ApiError(err.error || err.message || 'Request failed', err.code);
   }
   const json = await res.json();
   return normalizeKeys(json) as T;
@@ -94,14 +104,14 @@ export const api = {
   },
   verification: {
     submitIdentity: (data: { realName: string; idCard: string }) =>
-      request<{ success: boolean; verification: any }>('/verification/identity', {
+      request<{ success: boolean; verification: any; validationInfo?: any }>('/verification/identity', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     getIdentity: () =>
       request<{ success: boolean; verification: any }>('/verification/identity'),
     submitTicket: (data: { concertId: number; ticketNumber: string; purchaseChannel?: string; seatInfo?: string }) =>
-      request<{ success: boolean; verification: any }>('/verification/ticket', {
+      request<{ success: boolean; verification: any; validationInfo?: any }>('/verification/ticket', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

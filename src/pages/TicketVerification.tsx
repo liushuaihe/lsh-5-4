@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Ticket, ShieldCheck, ShieldAlert, Loader2, Clock, Plus } from 'lucide-react';
+import { ArrowLeft, Ticket, ShieldCheck, ShieldAlert, Loader2, Clock, Plus, Info, Tag } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { useAuthStore } from '@/store/authStore';
+
+interface TicketValidationInfo {
+  ticketType: string;
+  isValidFormat: boolean;
+}
 
 export default function TicketVerification() {
   const navigate = useNavigate();
@@ -18,7 +23,9 @@ export default function TicketVerification() {
   const [submitting, setSubmitting] = useState(false);
   const [verifications, setVerifications] = useState<any[]>([]);
   const [currentVerification, setCurrentVerification] = useState<any>(null);
+  const [validationInfo, setValidationInfo] = useState<TicketValidationInfo | null>(null);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [success, setSuccess] = useState('');
   const [showForm, setShowForm] = useState(false);
 
@@ -78,7 +85,9 @@ export default function TicketVerification() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setErrorCode('');
     setSuccess('');
+    setValidationInfo(null);
 
     if (!selectedConcertId) {
       setError('请选择演唱会场次');
@@ -93,21 +102,52 @@ export default function TicketVerification() {
     try {
       const res = await api.verification.submitTicket({
         concertId: selectedConcertId,
-        ticketNumber: ticketNumber.trim(),
+        ticketNumber: ticketNumber.trim().toUpperCase(),
         purchaseChannel: purchaseChannel.trim(),
         seatInfo: seatInfo.trim(),
       });
       setCurrentVerification(res.verification);
-      setSuccess('购票凭证提交成功，正在审核中');
+      if (res.validationInfo) {
+        setValidationInfo(res.validationInfo);
+      }
+      setSuccess('购票凭证核验通过！');
       setTicketNumber('');
       setPurchaseChannel('');
       setSeatInfo('');
       loadData();
     } catch (e: any) {
       setError(e.message || '提交失败');
+      if (e.code) {
+        setErrorCode(e.code);
+      }
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const getValidationInfoDisplay = (info: TicketValidationInfo | null) => {
+    if (!info) return null;
+    
+    return (
+      <div className="glass rounded-xl p-4 border border-pink-500/30 bg-pink-500/5 mt-4">
+        <h4 className="text-white font-medium mb-3 flex items-center gap-2">
+          <Info className="w-4 h-4 text-pink-400" />
+          票号验证信息
+        </h4>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <Tag className="w-4 h-4 text-gray-500" />
+            <span className="text-gray-400">票号类型：</span>
+            <span className="text-white">{info.ticketType}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-gray-500" />
+            <span className="text-gray-400">格式校验：</span>
+            <span className="text-green-400">{info.isValidFormat ? '通过' : '未通过'}</span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const getStatusBadge = (status: string) => {
@@ -138,21 +178,33 @@ export default function TicketVerification() {
   const getStatusDisplay = () => {
     if (!currentVerification) return null;
     
+    let info = validationInfo;
+    if (!info && currentVerification.verificationInfo) {
+      try {
+        info = JSON.parse(currentVerification.verificationInfo);
+      } catch {
+        // ignore
+      }
+    }
+    
     switch (currentVerification.status) {
       case 'verified':
         return (
-          <div className="glass rounded-xl p-5 border border-green-500/30 bg-green-500/5 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5 text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-white font-medium text-sm">购票凭证已通过</h3>
-                <p className="text-gray-400 text-xs">
-                  {currentVerification.verifiedAt ? new Date(currentVerification.verifiedAt).toLocaleString('zh-CN') : ''}
-                </p>
+          <div className="space-y-4 mb-4">
+            <div className="glass rounded-xl p-5 border border-green-500/30 bg-green-500/5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-medium text-sm">购票凭证已通过</h3>
+                  <p className="text-gray-400 text-xs">
+                    {currentVerification.verifiedAt ? new Date(currentVerification.verifiedAt).toLocaleString('zh-CN') : ''}
+                  </p>
+                </div>
               </div>
             </div>
+            {getValidationInfoDisplay(info)}
           </div>
         );
       case 'pending':
@@ -316,8 +368,17 @@ export default function TicketVerification() {
                   </div>
 
                   {error && (
-                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm">
-                      {error}
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                      <p className="text-red-400 text-sm mb-2">{error}</p>
+                      {errorCode === 'TICKET_INVALID' && (
+                        <p className="text-gray-400 text-xs">
+                          💡 提示：请检查票号格式是否正确。常见格式示例：
+                          <br />• 大麦网：DM123456789012 或 DAMAI1234567890
+                          <br />• 猫眼：MAOYAN123456789012
+                          <br />• 票星球：PQX123456789012345
+                          <br />• 测试可用：DM123456789012
+                        </p>
+                      )}
                     </div>
                   )}
 

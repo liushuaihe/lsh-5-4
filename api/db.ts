@@ -2,6 +2,7 @@ import initSqlJs from 'sql.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+// v2
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -158,6 +159,7 @@ export async function initDb(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'pending',
       verified_at TEXT,
       reject_reason TEXT,
+      verification_info TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id),
       UNIQUE(user_id)
@@ -178,6 +180,7 @@ export async function initDb(): Promise<void> {
       status TEXT NOT NULL DEFAULT 'pending',
       verified_at TEXT,
       reject_reason TEXT,
+      verification_info TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (concert_id) REFERENCES concerts(id),

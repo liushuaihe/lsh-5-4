@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { queryOne, queryAll, run, saveDb } from '../db.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { validateIdCard, verifyNameIdMatch, validateTicketNumber } from '../utils/verification.js';
 
 const router = Router();
 
@@ -14,9 +15,25 @@ router.post('/identity', authMiddleware, async (req: Request, res: Response): Pr
       return;
     }
 
-    const idCardRegex = /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/;
-    if (!idCardRegex.test(idCard)) {
-      res.status(400).json({ success: false, error: '身份证号格式不正确' });
+    // 第一步：身份证号合法性校验（校验位、出生日期、地区码）
+    const idCardValidation = validateIdCard(idCard);
+    if (!idCardValidation.valid) {
+      res.status(400).json({ 
+        success: false, 
+        error: idCardValidation.error || '身份证号不合法',
+        code: 'ID_CARD_INVALID'
+      });
+      return;
+    }
+
+    // 第二步：姓名和身份证号一致性验证（模拟公安系统）
+    const nameMatchResult = verifyNameIdMatch(realName, idCard);
+    if (!nameMatchResult.match) {
+      res.status(400).json({ 
+        success: false, 
+        error: nameMatchResult.message,
+        code: 'NAME_ID_MISMATCH'
+      });
       return;
     }
 
@@ -31,16 +48,52 @@ router.post('/identity', authMiddleware, async (req: Request, res: Response): Pr
         res.status(400).json({ success: false, error: '您已完成实名认证' });
         return;
       }
-      run('UPDATE identity_verifications SET real_name = ?, id_card = ?, status = ?, reject_reason = NULL WHERE user_id = ?',
-        [realName, idCard, 'pending', userId]);
-    } else {
-      run('INSERT INTO identity_verifications (user_id, real_name, id_card, status) VALUES (?, ?, ?, ?)',
-        [userId, realName, idCard, 'pending']);
     }
+
+    // 自动审核：验证通过后直接标记为已验证
+    const now = new Date().toISOString();
+    const verificationData = {
+      real_name: realName,
+      id_card: idCard,
+      status: 'verified' as const,
+      verified_at: now,
+      verification_info: JSON.stringify({
+        ...idCardValidation.info,
+        confidence: nameMatchResult.confidence,
+        matchMessage: nameMatchResult.message,
+      }),
+    };
+
+    if (existing) {
+      run(
+        'UPDATE identity_verifications SET real_name = ?, id_card = ?, status = ?, verified_at = ?, verification_info = ?, reject_reason = NULL WHERE user_id = ?',
+        [verificationData.real_name, verificationData.id_card, verificationData.status, verificationData.verified_at, verificationData.verification_info, userId]
+      );
+    } else {
+      run(
+        'INSERT INTO identity_verifications (user_id, real_name, id_card, status, verified_at, verification_info) VALUES (?, ?, ?, ?, ?, ?)',
+        [userId, verificationData.real_name, verificationData.id_card, verificationData.status, verificationData.verified_at, verificationData.verification_info]
+      );
+    }
+
+    // 更新用户表的认证状态
+    run('UPDATE users SET identity_verified = 1, identity_verified_at = ? WHERE id = ?', [now, userId]);
     saveDb();
 
-    const verification = queryOne('SELECT id, user_id, real_name, status, created_at FROM identity_verifications WHERE user_id = ?', [userId]);
-    res.status(201).json({ success: true, verification });
+    const verification = queryOne(
+      'SELECT id, user_id, real_name, status, verified_at, created_at, verification_info FROM identity_verifications WHERE user_id = ?',
+      [userId]
+    );
+    
+    res.status(201).json({ 
+      success: true, 
+      verification,
+      validationInfo: {
+        ...idCardValidation.info,
+        confidence: nameMatchResult.confidence,
+        message: nameMatchResult.message,
+      }
+    });
   } catch (error) {
     console.error('Identity verification error:', error);
     res.status(500).json({ success: false, error: '提交实名认证失败' });
@@ -68,9 +121,20 @@ router.post('/ticket', authMiddleware, async (req: Request, res: Response): Prom
       return;
     }
 
-    const concert = queryOne('SELECT id FROM concerts WHERE id = ?', [concertId]);
+    const concert = queryOne('SELECT id, name FROM concerts WHERE id = ?', [concertId]);
     if (!concert) {
       res.status(404).json({ success: false, error: '演唱会场次不存在' });
+      return;
+    }
+
+    // 第一步：票号真实性校验
+    const ticketValidation = validateTicketNumber(ticketNumber, concertId, concert.name);
+    if (!ticketValidation.valid) {
+      res.status(400).json({ 
+        success: false, 
+        error: ticketValidation.error || '票号不合法',
+        code: 'TICKET_INVALID'
+      });
       return;
     }
 
@@ -85,19 +149,42 @@ router.post('/ticket', authMiddleware, async (req: Request, res: Response): Prom
         res.status(400).json({ success: false, error: '该场次您已完成购票凭证核验' });
         return;
       }
-      run('UPDATE ticket_verifications SET ticket_number = ?, purchase_channel = ?, seat_info = ?, status = ?, reject_reason = NULL WHERE user_id = ? AND concert_id = ?',
-        [ticketNumber, purchaseChannel || '', seatInfo || '', 'pending', userId, concertId]);
+    }
+
+    // 自动审核：票号验证通过后直接标记为已验证
+    const now = new Date().toISOString();
+    const verificationData = {
+      ticket_number: ticketNumber,
+      purchase_channel: purchaseChannel || '',
+      seat_info: seatInfo || '',
+      status: 'verified' as const,
+      verified_at: now,
+      verification_info: JSON.stringify(ticketValidation.info),
+    };
+
+    if (existing) {
+      run(
+        'UPDATE ticket_verifications SET ticket_number = ?, purchase_channel = ?, seat_info = ?, status = ?, verified_at = ?, verification_info = ?, reject_reason = NULL WHERE user_id = ? AND concert_id = ?',
+        [verificationData.ticket_number, verificationData.purchase_channel, verificationData.seat_info, verificationData.status, verificationData.verified_at, verificationData.verification_info, userId, concertId]
+      );
     } else {
-      run('INSERT INTO ticket_verifications (user_id, concert_id, ticket_number, purchase_channel, seat_info, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [userId, concertId, ticketNumber, purchaseChannel || '', seatInfo || '', 'pending']);
+      run(
+        'INSERT INTO ticket_verifications (user_id, concert_id, ticket_number, purchase_channel, seat_info, status, verified_at, verification_info) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, concertId, verificationData.ticket_number, verificationData.purchase_channel, verificationData.seat_info, verificationData.status, verificationData.verified_at, verificationData.verification_info]
+      );
     }
     saveDb();
 
     const verification = queryOne(
-      'SELECT id, user_id, concert_id, ticket_number, purchase_channel, seat_info, status, created_at FROM ticket_verifications WHERE user_id = ? AND concert_id = ?',
+      'SELECT id, user_id, concert_id, ticket_number, purchase_channel, seat_info, status, verified_at, created_at, verification_info FROM ticket_verifications WHERE user_id = ? AND concert_id = ?',
       [userId, concertId]
     );
-    res.status(201).json({ success: true, verification });
+    
+    res.status(201).json({ 
+      success: true, 
+      verification,
+      validationInfo: ticketValidation.info,
+    });
   } catch (error) {
     console.error('Ticket verification error:', error);
     res.status(500).json({ success: false, error: '提交购票凭证核验失败' });

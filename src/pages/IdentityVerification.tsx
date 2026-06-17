@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, ShieldCheck, ShieldAlert, Loader2, Clock } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, ShieldAlert, Loader2, Clock, User, MapPin, Calendar, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/utils/api';
 import { useAuthStore } from '@/store/authStore';
+
+interface ValidationInfo {
+  province: string;
+  birthday: string;
+  age: number;
+  gender: string;
+  confidence: number;
+  message: string;
+}
 
 export default function IdentityVerification() {
   const navigate = useNavigate();
@@ -13,7 +22,9 @@ export default function IdentityVerification() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [verification, setVerification] = useState<any>(null);
+  const [validationInfo, setValidationInfo] = useState<ValidationInfo | null>(null);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
@@ -39,7 +50,9 @@ export default function IdentityVerification() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setErrorCode('');
     setSuccess('');
+    setValidationInfo(null);
 
     if (!realName.trim()) {
       setError('请输入真实姓名');
@@ -50,45 +63,101 @@ export default function IdentityVerification() {
       return;
     }
 
-    const idCardRegex = /(^\d{15}$)|(^\d{18}$)|(^\d{17}(\d|X|x)$)/;
-    if (!idCardRegex.test(idCard)) {
-      setError('身份证号格式不正确');
-      return;
-    }
-
     setSubmitting(true);
     try {
       const res = await api.verification.submitIdentity({ realName, idCard });
       setVerification(res.verification);
-      setSuccess('实名认证提交成功，正在审核中');
+      if (res.validationInfo) {
+        setValidationInfo(res.validationInfo);
+      }
+      setSuccess('实名认证验证通过！');
       setRealName('');
       setIdCard('');
     } catch (e: any) {
       setError(e.message || '提交失败');
+      if (e.code) {
+        setErrorCode(e.code);
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
+  const getValidationInfoDisplay = (info: ValidationInfo | null) => {
+    if (!info) return null;
+    
+    return (
+      <div className="glass rounded-xl p-4 border border-cyan-500/30 bg-cyan-500/5 mt-4">
+        <h4 className="text-white font-medium mb-3 flex items-center gap-2">
+          <Info className="w-4 h-4 text-cyan-400" />
+          验证信息
+        </h4>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-gray-500" />
+            <span className="text-gray-400">发证地区：</span>
+            <span className="text-white">{info.province}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-500" />
+            <span className="text-gray-400">出生日期：</span>
+            <span className="text-white">{info.birthday}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-gray-500" />
+            <span className="text-gray-400">年龄：</span>
+            <span className="text-white">{info.age}岁</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-gray-500" />
+            <span className="text-gray-400">性别：</span>
+            <span className="text-white">{info.gender}</span>
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-700">
+          <p className="text-gray-400 text-xs">
+            <span className="text-cyan-400">验证结果：</span>
+            {info.message}
+          </p>
+          <p className="text-gray-500 text-xs mt-1">
+            置信度：{(info.confidence * 100).toFixed(1)}%
+          </p>
+        </div>
+      </div>
+    );
+  };
+
   const getStatusDisplay = () => {
     if (!verification) return null;
+    
+    let info = validationInfo;
+    if (!info && verification.verificationInfo) {
+      try {
+        info = JSON.parse(verification.verificationInfo);
+      } catch {
+        // ignore
+      }
+    }
     
     switch (verification.status) {
       case 'verified':
         return (
-          <div className="glass rounded-xl p-6 border border-green-500/30 bg-green-500/5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6 text-green-400" />
+          <div className="space-y-4">
+            <div className="glass rounded-xl p-6 border border-green-500/30 bg-green-500/5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <ShieldCheck className="w-6 h-6 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-medium">实名认证已通过</h3>
+                  <p className="text-gray-400 text-sm">
+                    认证时间：{verification.verifiedAt ? new Date(verification.verifiedAt).toLocaleString('zh-CN') : ''}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-white font-medium">实名认证已通过</h3>
-                <p className="text-gray-400 text-sm">
-                  认证时间：{verification.verifiedAt ? new Date(verification.verifiedAt).toLocaleString('zh-CN') : ''}
-                </p>
-              </div>
+              <p className="text-green-400 text-sm">您已完成实名认证，享受更多平台权限</p>
             </div>
-            <p className="text-green-400 text-sm">您已完成实名认证，享受更多平台权限</p>
+            {getValidationInfoDisplay(info)}
           </div>
         );
       case 'pending':
@@ -199,8 +268,22 @@ export default function IdentityVerification() {
               </div>
 
               {error && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm">
-                  {error}
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                  <p className="text-red-400 text-sm mb-2">{error}</p>
+                  {errorCode === 'ID_CARD_INVALID' && (
+                    <p className="text-gray-400 text-xs">
+                      💡 提示：请检查身份证号是否正确。18位身份证号最后一位为校验位，
+                      由前17位通过ISO 7064:1983.MOD 11-2算法计算得出。
+                      测试可用：110101199003077654（张三）
+                    </p>
+                  )}
+                  {errorCode === 'NAME_ID_MISMATCH' && (
+                    <p className="text-gray-400 text-xs">
+                      💡 提示：公安系统验证姓名与身份证号不匹配。
+                      请确保填写的是身份证上的真实姓名。
+                      测试可用：姓名"张三" + 身份证号110101199003077654
+                    </p>
+                  )}
                 </div>
               )}
 
