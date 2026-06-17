@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { MapPin, Calendar, Music, Plus, Loader2 } from 'lucide-react';
+import { MapPin, Calendar, Music, Plus, Loader2, Ticket } from 'lucide-react';
 import { api } from '@/utils/api';
 import PostCard from '@/components/PostCard';
+import TrustedBadge from '@/components/TrustedBadge';
+import { useAuthStore } from '@/store/authStore';
 
 export default function ConcertDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [concert, setConcert] = useState<any>(null);
   const [posts, setPosts] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'companion' | 'merch'>('companion');
   const [loading, setLoading] = useState(true);
   const [postsLoading, setPostsLoading] = useState(true);
+  const [myTicketStatus, setMyTicketStatus] = useState<any>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -29,6 +33,13 @@ export default function ConcertDetail() {
       .catch(() => setPosts([]))
       .finally(() => setPostsLoading(false));
   }, [id, activeTab]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    api.verification.getTicket(Number(id))
+      .then((res) => setMyTicketStatus(res.verification))
+      .catch(() => setMyTicketStatus(null));
+  }, [id, user]);
 
   if (loading) {
     return (
@@ -64,7 +75,7 @@ export default function ConcertDetail() {
             <Music size={16} className="text-neon-cyan" />
             <span>{concert.singer}</span>
           </div>
-          <div className="flex items-center gap-4 text-sm text-gray-400">
+          <div className="flex items-center gap-4 text-sm text-gray-400 mb-3">
             <div className="flex items-center gap-1">
               <MapPin size={14} className="text-neon-pink" />
               <span>{concert.city} · {concert.venue}</span>
@@ -74,6 +85,19 @@ export default function ConcertDetail() {
               <span>{concert.date ? new Date(concert.date).toLocaleDateString('zh-CN') : ''}</span>
             </div>
           </div>
+          {user && (
+            <button
+              onClick={() => navigate(`/verification/ticket/${id}`)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm hover:bg-neon-cyan/20 transition-all"
+            >
+              <Ticket size={14} />
+              <span>
+                {myTicketStatus?.status === 'verified' ? '已完成购票核验' : 
+                 myTicketStatus?.status === 'pending' ? '购票核验审核中' : 
+                 myTicketStatus?.status === 'rejected' ? '重新提交购票核验' : '核验购票凭证'}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -122,6 +146,9 @@ export default function ConcertDetail() {
                 authorName={post.author?.username}
                 concertId={post.concertId}
                 createdAt={post.createdAt}
+                identityVerified={post.author?.identityVerified}
+                ticketVerified={post.author?.ticketVerified}
+                fullyVerified={post.author?.fullyVerified}
               />
             ))}
           </div>

@@ -2,12 +2,16 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MessageCircle, Star, Clock, Loader2 } from 'lucide-react';
 import { api } from '@/utils/api';
+import TrustedBadge from '@/components/TrustedBadge';
+import { useAuthStore } from '@/store/authStore';
 
 export default function PostDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [post, setPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [messageError, setMessageError] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -47,10 +51,16 @@ export default function PostDetail() {
       </div>
 
       <div className="glass rounded-2xl p-6 max-w-lg mx-auto animate-slide-up">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${isCompanion ? 'bg-neon-pink/20 text-neon-pink' : 'bg-neon-cyan/20 text-neon-cyan'}`}>
             {isCompanion ? '找同伴' : '置换周边'}
           </span>
+          <TrustedBadge 
+            identityVerified={post.author?.identityVerified}
+            ticketVerified={post.author?.ticketVerified}
+            fullyVerified={post.author?.fullyVerified}
+            size="md"
+          />
         </div>
 
         <h2 className="text-xl text-white font-medium mb-3">{post.title}</h2>
@@ -62,7 +72,15 @@ export default function PostDetail() {
               {post.author?.username?.[0] || '?'}
             </div>
             <div className="flex-1">
-              <p className="text-white font-medium">{post.author?.username || '未知用户'}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-white font-medium">{post.author?.username || '未知用户'}</p>
+                <TrustedBadge 
+                  identityVerified={post.author?.identityVerified}
+                  ticketVerified={post.author?.ticketVerified}
+                  fullyVerified={post.author?.fullyVerified}
+                  size="sm"
+                />
+              </div>
               <div className="flex items-center gap-1 text-yellow-400 text-xs">
                 <Star size={12} className="fill-yellow-400" />
                 <span>{post.author?.reputationScore ?? '-'}</span>
@@ -76,10 +94,26 @@ export default function PostDetail() {
           <span>{post.createdAt ? new Date(post.createdAt).toLocaleString('zh-CN') : ''}</span>
         </div>
 
+        {messageError && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-red-400 text-sm mb-4">
+            {messageError}
+          </div>
+        )}
+
         <div className="flex gap-3">
           <button
             className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-neon-cyan to-cyan-600 text-white font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all"
-            onClick={() => navigate(`/messages/${post.author?.id}`)}
+            onClick={() => {
+              if (!user) {
+                navigate('/login');
+                return;
+              }
+              if (user.id === post.author?.id) {
+                setMessageError('不能给自己发私信');
+                return;
+              }
+              navigate(`/messages/${post.author?.id}`);
+            }}
           >
             <MessageCircle size={16} />
             私信 TA

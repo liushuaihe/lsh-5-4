@@ -53,12 +53,26 @@ router.get('/:concertId/posts', async (req: Request, res: Response): Promise<voi
     let posts;
     if (type && (type === 'companion' || type === 'merch')) {
       posts = queryAll(
-        'SELECT p.id, p.type, p.title, p.content, p.created_at, u.id as user_id, u.username, u.avatar FROM posts p JOIN users u ON p.user_id = u.id WHERE p.concert_id = ? AND p.type = ? ORDER BY p.created_at DESC',
+        `SELECT p.id, p.type, p.title, p.content, p.created_at, 
+                u.id as user_id, u.username, u.avatar, u.identity_verified,
+                tv.status as ticket_status
+         FROM posts p 
+         JOIN users u ON p.user_id = u.id 
+         LEFT JOIN ticket_verifications tv ON p.user_id = tv.user_id AND p.concert_id = tv.concert_id
+         WHERE p.concert_id = ? AND p.type = ? 
+         ORDER BY p.created_at DESC`,
         [concertId, type]
       );
     } else {
       posts = queryAll(
-        'SELECT p.id, p.type, p.title, p.content, p.created_at, u.id as user_id, u.username, u.avatar FROM posts p JOIN users u ON p.user_id = u.id WHERE p.concert_id = ? ORDER BY p.created_at DESC',
+        `SELECT p.id, p.type, p.title, p.content, p.created_at, 
+                u.id as user_id, u.username, u.avatar, u.identity_verified,
+                tv.status as ticket_status
+         FROM posts p 
+         JOIN users u ON p.user_id = u.id 
+         LEFT JOIN ticket_verifications tv ON p.user_id = tv.user_id AND p.concert_id = tv.concert_id
+         WHERE p.concert_id = ? 
+         ORDER BY p.created_at DESC`,
         [concertId]
       );
     }
@@ -73,6 +87,9 @@ router.get('/:concertId/posts', async (req: Request, res: Response): Promise<voi
         id: p.user_id,
         username: p.username,
         avatar: p.avatar,
+        identityVerified: p.identity_verified === 1,
+        ticketVerified: p.ticket_status === 'verified',
+        fullyVerified: p.identity_verified === 1 && p.ticket_status === 'verified',
       },
     }));
 

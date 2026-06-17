@@ -8,7 +8,13 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
 
     const post = queryOne(
-      'SELECT p.id, p.type, p.title, p.content, p.created_at, p.concert_id, u.id as user_id, u.username, u.avatar, u.reputation_score FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id = ?',
+      `SELECT p.id, p.type, p.title, p.content, p.created_at, p.concert_id, 
+              u.id as user_id, u.username, u.avatar, u.reputation_score, u.identity_verified,
+              tv.status as ticket_status
+       FROM posts p 
+       JOIN users u ON p.user_id = u.id 
+       LEFT JOIN ticket_verifications tv ON p.user_id = tv.user_id AND p.concert_id = tv.concert_id
+       WHERE p.id = ?`,
       [id]
     );
 
@@ -29,6 +35,9 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
         username: post.username,
         avatar: post.avatar,
         reputation_score: post.reputation_score,
+        identityVerified: post.identity_verified === 1,
+        ticketVerified: post.ticket_status === 'verified',
+        fullyVerified: post.identity_verified === 1 && post.ticket_status === 'verified',
       },
     };
 

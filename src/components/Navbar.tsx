@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, LogOut, MessageCircle } from 'lucide-react';
+import { Menu, X, LogOut, MessageCircle, Shield, Ticket } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import TrustedBadge from './TrustedBadge';
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -12,6 +13,11 @@ export default function Navbar() {
     { to: '/', label: '首页' },
     { to: '/messages', label: '私信', icon: MessageCircle, badge: true },
     { to: '/profile', label: '个人中心' },
+  ];
+
+  const verifyLinks = [
+    { to: '/verification/identity', label: '实名认证', icon: Shield },
+    { to: '/verification/ticket', label: '购票核验', icon: Ticket },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -46,7 +52,30 @@ export default function Navbar() {
         <div className="hidden items-center gap-3 md:flex">
           {token && user ? (
             <>
-              <span className="text-sm text-gray-300">{user.username}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-300">{user.username}</span>
+                <TrustedBadge 
+                  identityVerified={user.identityVerified}
+                  fullyVerified={user.identityVerified && (user.verifiedTicketCount || 0) > 0}
+                  size="sm"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                {verifyLinks.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                      isActive(link.to)
+                        ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30'
+                        : 'text-gray-400 hover:text-neon-cyan hover:bg-neon-cyan/10'
+                    }`}
+                  >
+                    <link.icon className="h-3.5 w-3.5" />
+                    <span>{link.label}</span>
+                  </Link>
+                ))}
+              </div>
               <button
                 onClick={logout}
                 className="flex items-center gap-1 rounded-lg border border-gray-600 px-3 py-1.5 text-sm text-gray-300 transition-colors hover:border-neon-pink hover:text-neon-pink"
@@ -102,16 +131,46 @@ export default function Navbar() {
                 )}
               </Link>
             ))}
+            {token && user && (
+              <>
+                <div className="my-2 border-t border-white/5" />
+                <p className="px-3 text-xs text-gray-500">信任认证</p>
+                {verifyLinks.map((link) => (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                      isActive(link.to)
+                        ? 'bg-neon-cyan/10 text-neon-cyan'
+                        : 'text-gray-300 hover:bg-white/5'
+                    }`}
+                  >
+                    <link.icon className="h-4 w-4" />
+                    {link.label}
+                  </Link>
+                ))}
+              </>
+            )}
             <div className="my-2 border-t border-white/5" />
             {token && user ? (
-              <div className="flex items-center justify-between px-3">
-                <span className="text-sm text-gray-300">{user.username}</span>
+              <div className="flex flex-col gap-2 px-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-gray-300">{user.username}</span>
+                    <TrustedBadge 
+                      identityVerified={user.identityVerified}
+                      fullyVerified={user.identityVerified && (user.verifiedTicketCount || 0) > 0}
+                      size="sm"
+                    />
+                  </div>
+                </div>
                 <button
                   onClick={() => { logout(); setMobileOpen(false); }}
-                  className="flex items-center gap-1 text-sm text-gray-400 hover:text-neon-pink"
+                  className="flex items-center justify-center gap-1 rounded-lg border border-gray-600 py-2 text-sm text-gray-300 hover:border-neon-pink hover:text-neon-pink"
                 >
                   <LogOut className="h-4 w-4" />
-                  退出
+                  退出登录
                 </button>
               </div>
             ) : (

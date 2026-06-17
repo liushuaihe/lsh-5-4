@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Edit3, Loader2 } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Edit3, Loader2, ShieldCheck, Shield, Ticket } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { api } from '@/utils/api';
 import RatingStars from '@/components/RatingStars';
+import TrustedBadge from '@/components/TrustedBadge';
 
 export default function Profile() {
   const { userId } = useParams<{ userId?: string }>();
   const { user: currentUser } = useAuthStore();
+  const navigate = useNavigate();
   const isOwn = !userId || String(currentUser?.id) === userId;
 
   const [profile, setProfile] = useState<any>(null);
@@ -52,7 +54,9 @@ export default function Profile() {
               const postRes = await api.posts.list(c.id);
               const mine = (postRes.posts || []).filter((p: any) => p.author?.id === targetId);
               allPosts.push(...mine);
-            } catch {}
+            } catch {
+              // Ignore errors for individual concert post queries
+            }
           }
           setUserPosts(allPosts);
         })
@@ -85,19 +89,66 @@ export default function Profile() {
               {profile.username?.[0] || '?'}
             </div>
           </div>
-          <h2 className="font-display text-lg text-white mb-1">{profile.username}</h2>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="font-display text-lg text-white">{profile.username}</h2>
+            <TrustedBadge 
+              identityVerified={profile.identityVerified}
+              fullyVerified={profile.identityVerified && (profile.verifiedTicketCount || 0) > 0}
+              size="sm"
+            />
+          </div>
           <p className="text-gray-400 text-sm mb-2">{profile.email}</p>
-          <div className="flex items-center gap-1.5 mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
             <RatingStars score={Math.round(profile.reputationScore || 0)} size={18} />
             <span className="text-yellow-400 text-sm ml-1">
               {(profile.reputationScore || 0).toFixed(1)}
             </span>
           </div>
+          
+          <div className="flex flex-wrap gap-2 mb-4 justify-center">
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+              profile.identityVerified 
+                ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30' 
+                : 'bg-gray-800 text-gray-500 border border-gray-700'
+            }`}>
+              <Shield size={12} />
+              <span>{profile.identityVerified ? '已实名认证' : '未实名认证'}</span>
+            </div>
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+              (profile.verifiedTicketCount || 0) > 0
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                : 'bg-gray-800 text-gray-500 border border-gray-700'
+            }`}>
+              <Ticket size={12} />
+              <span>{profile.verifiedTicketCount || 0} 场购票核验</span>
+            </div>
+          </div>
+
           {isOwn && (
-            <button className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg border border-neon-pink/30 text-neon-pink text-sm hover:bg-neon-pink/10 transition-all">
-              <Edit3 size={14} />
-              编辑资料
-            </button>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              <button 
+                onClick={() => navigate('/verification/identity')}
+                className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm transition-all ${
+                  profile.identityVerified
+                    ? 'bg-green-500/10 border border-green-500/30 text-green-400'
+                    : 'bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/20'
+                }`}
+              >
+                <ShieldCheck size={14} />
+                {profile.identityVerified ? '已完成实名认证' : '去实名认证'}
+              </button>
+              <button 
+                onClick={() => navigate('/verification/ticket')}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-neon-pink/30 text-neon-pink text-sm hover:bg-neon-pink/10 transition-all"
+              >
+                <Ticket size={14} />
+                购票凭证核验
+              </button>
+              <button className="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg border border-gray-600 text-gray-400 text-sm hover:bg-gray-800 transition-all">
+                <Edit3 size={14} />
+                编辑资料
+              </button>
+            </div>
           )}
         </div>
       </div>

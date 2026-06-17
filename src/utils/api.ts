@@ -92,4 +92,24 @@ export const api = {
     list: (userId: number) =>
       request<{ success: boolean; ratings: any[]; averageScore: number; total: number }>(`/users/${userId}/ratings`),
   },
+  verification: {
+    submitIdentity: (data: { realName: string; idCard: string }) =>
+      request<{ success: boolean; verification: any }>('/verification/identity', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getIdentity: () =>
+      request<{ success: boolean; verification: any }>('/verification/identity'),
+    submitTicket: (data: { concertId: number; ticketNumber: string; purchaseChannel?: string; seatInfo?: string }) =>
+      request<{ success: boolean; verification: any }>('/verification/ticket', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getTicket: (concertId: number) =>
+      request<{ success: boolean; verification: any }>(`/verification/ticket/${concertId}`),
+    getTickets: () =>
+      request<{ success: boolean; verifications: any[] }>('/verification/tickets'),
+    getStatus: (concertId: number, userId: number) =>
+      request<{ success: boolean; status: { identityVerified: boolean; ticketVerified: boolean; fullyVerified: boolean } }>(`/verification/status/${concertId}/${userId}`),
+  },
 };

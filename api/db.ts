@@ -71,6 +71,8 @@ export async function initDb(): Promise<void> {
       password_hash TEXT NOT NULL,
       avatar TEXT DEFAULT '',
       reputation_score REAL DEFAULT 0,
+      identity_verified INTEGER DEFAULT 0,
+      identity_verified_at TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     )
   `);
@@ -146,6 +148,59 @@ export async function initDb(): Promise<void> {
 
   db.run(`CREATE INDEX IF NOT EXISTS idx_ratings_ratee ON ratings(ratee_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_ratings_rater ON ratings(rater_id)`);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS identity_verifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      real_name TEXT NOT NULL,
+      id_card TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      verified_at TEXT,
+      reject_reason TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id)
+    )
+  `);
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_identity_verifications_user ON identity_verifications(user_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_identity_verifications_status ON identity_verifications(status)`);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ticket_verifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      concert_id INTEGER NOT NULL,
+      ticket_number TEXT NOT NULL,
+      purchase_channel TEXT,
+      seat_info TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      verified_at TEXT,
+      reject_reason TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (concert_id) REFERENCES concerts(id),
+      UNIQUE(user_id, concert_id)
+    )
+  `);
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_ticket_verifications_user ON ticket_verifications(user_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_ticket_verifications_concert ON ticket_verifications(concert_id)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_ticket_verifications_status ON ticket_verifications(status)`);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS daily_message_limits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      stranger_message_count INTEGER DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id, date)
+    )
+  `);
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_daily_message_limits_user_date ON daily_message_limits(user_id, date)`);
 
   const concerts = [
     { name: '周杰伦嘉年华世界巡回演唱会', singer: '周杰伦', city: '北京', venue: '国家体育场(鸟巢)', date: '2025-08-15', poster: '', description: '周杰伦嘉年华世界巡回演唱会北京站，经典歌曲倾情演绎' },

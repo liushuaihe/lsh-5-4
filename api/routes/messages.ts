@@ -83,6 +83,50 @@ router.get('/:userId', authMiddleware, async (req: Request, res: Response): Prom
   }
 });
 
+function getDailyLimit(identityVerified: boolean, reputationScore: number, fullyVerified: boolean): number {
+  if (fullyVerified) return 999;
+  if (!identityVerified) return 3;
+  if (reputationScore < 3.0) return 5;
+  if (reputationScore < 4.5) return 10;
+  return 20;
+}
+
+function isStranger(senderId: number, receiverId: number): boolean {
+  const existingMessage = queryOne(
+    'SELECT id FROM messages WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?) LIMIT 1',
+    [senderId, receiverId, receiverId, senderId]
+  );
+  return !existingMessage;
+}
+
+function getTodayStrangerCount(userId: number): number {
+  const today = new Date().toISOString().split('T')[0];
+  const record = queryOne(
+    'SELECT stranger_message_count FROM daily_message_limits WHERE user_id = ? AND date = ?',
+    [userId, today]
+  );
+  return record?.stranger_message_count || 0;
+}
+
+function incrementStrangerCount(userId: number): void {
+  const today = new Date().toISOString().split('T')[0];
+  const existing = queryOne(
+    'SELECT id FROM daily_message_limits WHERE user_id = ? AND date = ?',
+    [userId, today]
+  );
+  if (existing) {
+    run(
+      'UPDATE daily_message_limits SET stranger_message_count = stranger_message_count + 1 WHERE user_id = ? AND date = ?',
+      [userId, today]
+    );
+  } else {
+    run(
+      'INSERT INTO daily_message_limits (user_id, date, stranger_message_count) VALUES (?, ?, ?)',
+      [userId, today, 1]
+    );
+  }
+}
+
 router.post('/:userId', authMiddleware, async (req: Request, res: Response): Promise<void> => {
   try {
     const senderId = (req as any).user.id;
@@ -94,10 +138,39 @@ router.post('/:userId', authMiddleware, async (req: Request, res: Response): Pro
       return;
     }
 
-    const user = queryOne('SELECT id FROM users WHERE id = ?', [receiverId]);
-    if (!user) {
+    const receiver = queryOne('SELECT id FROM users WHERE id = ?', [receiverId]);
+    if (!receiver) {
       res.status(404).json({ success: false, error: 'Recipient not found' });
       return;
+    }
+
+    const stranger = isStranger(senderId, receiverId);
+    if (stranger) {
+      const sender = queryOne(
+        'SELECT identity_verified, reputation_score FROM users WHERE id = ?',
+        [senderId]
+      );
+      const identityVerified = sender?.identity_verified === 1;
+      const reputationScore = sender?.reputation_score || 0;
+      
+      const ticketVerified = !!queryOne(
+        'SELECT id FROM ticket_verifications WHERE user_id = ? AND status = ? LIMIT 1',
+        [senderId, 'verified']
+      );
+      const fullyVerified = identityVerified && ticketVerified;
+
+      const limit = getDailyLimit(identityVerified, reputationScore, fullyVerified);
+      const currentCount = getTodayStrangerCount(senderId);
+
+      if (currentCount >= limit) {
+        res.status(429).json({ 
+          success: false, 
+          error: `今日陌生人搭讪次数已达上限（${limit}次），请提升认证等级或明日再试` 
+        });
+        return;
+      }
+
+      incrementStrangerCount(senderId);
     }
 
     run('INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)', [senderId, receiverId, content]);

@@ -7,6 +7,10 @@ interface User {
   email: string;
   avatar: string | null;
   reputationScore: number;
+  identityVerified: boolean;
+  identityVerifiedAt: string | null;
+  verifiedTicketCount: number;
+  createdAt: string;
 }
 
 interface AuthState {

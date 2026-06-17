@@ -11,6 +11,7 @@ import concertRoutes from './routes/concerts.js';
 import postRoutes from './routes/posts.js';
 import messageRoutes from './routes/messages.js';
 import ratingRoutes from './routes/ratings.js';
+import verificationRoutes from './routes/verification.js';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 
@@ -35,6 +36,7 @@ app.use('/api/concerts', concertRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/ratings', ratingRoutes);
+app.use('/api/verification', verificationRoutes);
 
 app.use('/api/health', (req: Request, res: Response): void => {
   res.status(200).json({ success: true, message: 'ok' });

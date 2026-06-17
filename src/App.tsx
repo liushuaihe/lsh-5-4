@@ -12,6 +12,8 @@ import Messages from '@/pages/Messages';
 import Chat from '@/pages/Chat';
 import Profile from '@/pages/Profile';
 import RateUser from '@/pages/RateUser';
+import IdentityVerification from '@/pages/IdentityVerification';
+import TicketVerification from '@/pages/TicketVerification';
 import { useAuthStore } from '@/store/authStore';
 
 export default function App() {
@@ -37,6 +39,9 @@ export default function App() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/rate/:userId" element={<ProtectedRoute><RateUser /></ProtectedRoute>} />
+          <Route path="/verification/identity" element={<ProtectedRoute><IdentityVerification /></ProtectedRoute>} />
+          <Route path="/verification/ticket" element={<ProtectedRoute><TicketVerification /></ProtectedRoute>} />
+          <Route path="/verification/ticket/:concertId" element={<ProtectedRoute><TicketVerification /></ProtectedRoute>} />
         </Routes>
       </div>
     </Router>

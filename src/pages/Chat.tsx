@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2 } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, AlertCircle } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { api } from '@/utils/api';
 import { useAuthStore } from '@/store/authStore';
+import TrustedBadge from '@/components/TrustedBadge';
 
 let socket: Socket | null = null;
 
@@ -22,6 +23,9 @@ export default function Chat() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [partnerName, setPartnerName] = useState('');
+  const [partnerIdentityVerified, setPartnerIdentityVerified] = useState(false);
+  const [error, setError] = useState('');
+  const [showLimitInfo, setShowLimitInfo] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,6 +37,7 @@ export default function Chat() {
         for (const m of msgs) {
           if (m.sender?.id === Number(partnerId)) {
             setPartnerName(m.sender?.username || '');
+            setPartnerIdentityVerified(m.sender?.identityVerified || false);
             break;
           }
         }
@@ -40,7 +45,11 @@ export default function Chat() {
           const lastMsg = msgs[msgs.length - 1];
           if (lastMsg.sender?.id !== user?.id) {
             setPartnerName(lastMsg.sender?.username || '');
+            setPartnerIdentityVerified(lastMsg.sender?.identityVerified || false);
           }
+        }
+        if (msgs.length === 0) {
+          setShowLimitInfo(true);
         }
       })
       .catch(() => {})
@@ -69,6 +78,7 @@ export default function Chat() {
   const handleSend = async () => {
     const text = newMessage.trim();
     if (!text || !partnerId || !user) return;
+    setError('');
     try {
       const res = await api.messages.send(Number(partnerId), text);
       const msg = res.message;
@@ -76,7 +86,10 @@ export default function Chat() {
       const s = getSocket();
       s.emit('private:message', { senderId: user.id, receiverId: Number(partnerId), content: text });
       setNewMessage('');
-    } catch {}
+      setShowLimitInfo(false);
+    } catch (e: any) {
+      setError(e.message || '发送失败');
+    }
   };
 
   if (loading) {
@@ -99,7 +112,15 @@ export default function Chat() {
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-neon-cyan to-neon-pink flex items-center justify-center text-white text-sm font-bold">
           {partnerName?.[0] || '?'}
         </div>
-        <span className="text-white font-medium">{partnerName || '对话'}</span>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-white font-medium">{partnerName || '对话'}</span>
+            <TrustedBadge 
+              identityVerified={partnerIdentityVerified}
+              size="sm"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 scrollbar-hide">
@@ -125,6 +146,21 @@ export default function Chat() {
         <div ref={bottomRef} />
       </div>
 
+      {error && (
+        <div className="px-4 py-2 bg-red-500/10 border-t border-red-500/30 shrink-0">
+          <div className="flex items-center gap-2 text-red-400 text-sm">
+            <AlertCircle size={14} />
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+      {showLimitInfo && !error && user && (
+        <div className="px-4 py-2 bg-neon-cyan/5 border-t border-neon-cyan/20 shrink-0">
+          <p className="text-neon-cyan text-xs">
+            💡 提示：完成实名认证和购票核验可提升每日陌生人搭讪次数限制
+          </p>
+        </div>
+      )}
       <div className="glass px-4 py-3 flex items-center gap-2 shrink-0">
         <input
           type="text"
